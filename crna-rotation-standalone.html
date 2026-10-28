@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRNA Rotation Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #EEF2F1; --surface: #FFFFFF; --surface-2: #F5F7F6; --ink: #16222E; --muted: #5C6B71;
+    --line: #D7DEDC; --line-strong: #B9C3C1; --teal: #146B6B; --teal-ink: #0E4F4F; --teal-soft: #DCEAE8;
+    --amber: #B4791F; --amber-soft: #F5E7CF; --danger: #B3402F;
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10161C; --surface: #182229; --surface-2: #1D2830; --ink: #E7EDEE; --muted: #93A3A8;
+      --line: #2B383F; --line-strong: #3A4A52; --teal: #4FADA9; --teal-ink: #B7E2DE; --teal-soft: #1C3634;
+      --amber: #E0A94C; --amber-soft: #3A2E17; --danger: #E08974;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10161C; --surface: #182229; --surface-2: #1D2830; --ink: #E7EDEE; --muted: #93A3A8;
+    --line: #2B383F; --line-strong: #3A4A52; --teal: #4FADA9; --teal-ink: #B7E2DE; --teal-soft: #1C3634;
+    --amber: #E0A94C; --amber-soft: #3A2E17; --danger: #E08974;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; min-height: 100vh; }
+  button { font-family: inherit; }
+  #app { max-width: 1180px; margin: 0 auto; padding: 20px 20px 60px; }
+  body:not(.authed) #app { display: none; }
+
+  #passwordGate { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+  body.authed #passwordGate { display: none; }
+  .gate-card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 32px; width: 100%; max-width: 360px; }
+  .gate-card .brand-mark { margin: 0 auto 16px; }
+  .gate-card h2 { font-size: 17px; margin: 0 0 6px; text-align: center; }
+  .gate-card p { font-size: 13px; color: var(--muted); text-align: center; margin: 0 0 22px; }
+  .gate-card input { width: 100%; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font-size: 14px; font-family: inherit; margin-bottom: 10px; }
+  .gate-card input.error { border-color: var(--danger); }
+  .gate-card .gate-error { font-size: 12.5px; color: var(--danger); text-align: center; margin: -4px 0 12px; min-height: 16px; }
+  .gate-card button { width: 100%; background: var(--teal); color: #fff; border: none; border-radius: 3px; padding: 10px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .gate-card button:hover { background: var(--teal-ink); }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 6px 0 16px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; background: var(--teal); color: #fff; font-family: var(--font-mono); font-weight: 600; font-size: 14px; border-radius: 3px; flex-shrink: 0; }
+  .brand-text h1 { font-size: 19px; font-weight: 600; margin: 0; line-height: 1.2; }
+  .brand-text p { font-size: 13px; color: var(--muted); margin: 2px 0 0; }
+  .topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  .service-tabs { display: flex; gap: 6px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .service-tab { padding: 9px 16px; border: none; background: none; color: var(--muted); font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .service-tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+
+  .week-nav { display: flex; align-items: center; gap: 8px; }
+  .nav-arrow { width: 30px; height: 30px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); border-radius: 3px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+  .nav-arrow:hover { border-color: var(--teal); color: var(--teal); }
+  .week-label { font-family: var(--font-mono); font-size: 14px; min-width: 168px; text-align: center; }
+  .ghost-btn { border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); border-radius: 3px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+  .ghost-btn:hover { color: var(--ink); }
+  .primary-btn { background: var(--teal); color: #fff; border: none; border-radius: 3px; padding: 9px 16px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .primary-btn:hover { background: var(--teal-ink); }
+
+  .status-pill { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
+  .status-dot.ok { background: var(--teal); }
+  .status-dot.err { background: var(--danger); }
+  .status-dot.busy { background: var(--amber); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .banner { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber); border-radius: 4px; padding: 14px 16px; font-size: 13px; margin-bottom: 18px; line-height: 1.5; }
+  .banner.err { background: #F6DCD6; color: var(--danger); border-color: var(--danger); }
+  .banner code { background: rgba(0,0,0,0.08); padding: 1px 5px; border-radius: 2px; font-family: var(--font-mono); }
+
+  .setup-screen { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 28px; max-width: 640px; margin: 40px auto; }
+  .setup-screen h2 { margin: 0 0 6px; font-size: 18px; }
+  .setup-screen p { font-size: 13.5px; color: var(--muted); line-height: 1.6; }
+  .setup-screen ol { font-size: 13.5px; line-height: 1.8; padding-left: 20px; }
+  .setup-screen input { width: 100%; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font-size: 13px; font-family: var(--font-mono); margin: 8px 0 12px; }
+
+  .layout { display: grid; grid-template-columns: 260px 1fr; gap: 24px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  .roster-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 18px; }
+  .roster-panel h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .panel-sub { font-size: 12px; color: var(--muted); margin: 3px 0 14px; }
+  .roster-list { list-style: none; margin: 0; padding: 0; }
+  .roster-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .roster-row:first-child { border-top: none; }
+  .roster-rank { font-family: var(--font-mono); font-size: 11px; color: var(--muted); width: 16px; flex-shrink: 0; }
+  .roster-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--line-strong); }
+  .roster-dot.due { background: var(--amber); }
+  .roster-name { flex: 1; min-width: 0; }
+  .roster-name .nm { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .roster-name .meta { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .roster-count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); flex-shrink: 0; }
+  .type-tag { font-size: 10px; padding: 1px 5px; border-radius: 2px; border: 1px solid var(--line-strong); color: var(--muted); margin-left: 5px; }
+  .type-tag.prn { color: var(--amber); border-color: var(--amber); }
+  .manage-link { display: block; text-align: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--teal); cursor: pointer; background: none; border-left: none; border-right: none; border-bottom: none; width: 100%; }
+  .manage-link:hover { color: var(--teal-ink); }
+  .chart-block { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .chart-block h3 { font-size: 12px; font-weight: 600; margin: 0 0 10px; color: var(--muted); }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .bar-label { width: 62px; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 10px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--teal); border-radius: 2px; }
+  .bar-num { font-family: var(--font-mono); font-size: 11px; color: var(--muted); width: 18px; text-align: right; flex-shrink: 0; }
+
+  .board { min-width: 0; }
+  .board-scroll { overflow-x: auto; }
+  .board-grid { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 10px; min-width: 760px; }
+  .day-card { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .day-card.is-today { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); }
+  .day-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .day-name { font-weight: 600; font-size: 13px; }
+  .day-date { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .day-select { width: 100%; padding: 8px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit; }
+  .day-select.unfilled { border-color: var(--amber); background: var(--amber-soft); }
+  .day-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .suggest-btn { border: none; background: none; color: var(--teal); font-size: 11.5px; cursor: pointer; padding: 2px 0; }
+  .suggest-btn:hover { text-decoration: underline; }
+  .assigned-tag { font-size: 11px; color: var(--muted); }
+  .assigned-tag.fair { color: var(--teal); }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 16px 2px 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 8px; height: 8px; border-radius: 50%; }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(16,22,28,0.5); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+  .modal-backdrop[hidden] { display: none; }
+  .modal { background: var(--surface); border-radius: 6px; width: 100%; max-width: 480px; max-height: 86vh; overflow-y: auto; padding: 22px; }
+  .modal h2 { font-size: 16px; margin: 0 0 4px; }
+  .modal .modal-sub { font-size: 12.5px; color: var(--muted); margin: 0 0 18px; }
+  .add-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .add-row input[type="text"] { flex: 1; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit; }
+  .add-row select { padding: 8px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit; }
+  .day-toggle-row { display: flex; gap: 6px; margin: 2px 0 4px; flex-wrap: wrap; }
+  .day-chip { width: 34px; height: 28px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); border-radius: 3px; font-size: 11.5px; font-family: var(--font-mono); cursor: pointer; }
+  .day-chip.on { background: var(--teal-soft); border-color: var(--teal); color: var(--teal-ink); }
+  .day-chip-sm { width: 28px; height: 22px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); border-radius: 2px; font-size: 10px; font-family: var(--font-mono); cursor: pointer; padding: 0; }
+  .day-chip-sm.on { background: var(--teal-soft); border-color: var(--teal); color: var(--teal-ink); }
+  .day-chips-sm { display: flex; gap: 3px; }
+  .staff-manage-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .staff-manage-row:first-of-type { border-top: none; }
+  .staff-manage-row.inactive .nm { color: var(--muted); text-decoration: line-through; }
+  .icon-btn { border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); border-radius: 3px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
+  .icon-btn:hover { color: var(--ink); }
+  .icon-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
+  .modal-close-row { text-align: right; margin-top: 18px; }
+  .empty-note { font-size: 13px; color: var(--muted); padding: 20px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="passwordGate">
+  <div class="gate-card">
+    <div class="brand-mark">CR</div>
+    <h2>CRNA Rotation Tracker</h2>
+    <p>Enter the team password to continue.</p>
+    <input type="password" id="gatePasswordInput" placeholder="Password" autocomplete="off">
+    <div class="gate-error" id="gateError"></div>
+    <button id="gateSubmitBtn">Continue</button>
+  </div>
+</div>
+
+<div id="app">
+
+  <div id="setupScreen" class="setup-screen" hidden>
+    <h2>One-time setup needed</h2>
+    <p>This page needs the web address of your Google Apps Script backend before it can load or save anything. If you've already deployed it, paste the URL below — it will be remembered in this browser.</p>
+    <input type="text" id="setupUrlInput" placeholder="https://script.google.com/macros/s/XXXXXXXX/exec">
+    <button class="primary-btn" id="setupSaveBtn">Save and connect</button>
+    <p style="margin-top:18px;">Haven't deployed it yet? In your Google Sheet: <strong>Extensions &rarr; Apps Script</strong>, paste in the backend code, run <code>setupSheets</code> once, then <strong>Deploy &rarr; New deployment &rarr; Web app</strong>, set "Who has access" to <strong>Anyone</strong>, and copy the URL it gives you.</p>
+  </div>
+
+  <div id="mainScreen" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">CR</div>
+        <div class="brand-text">
+          <h1>CRNA Rotation Tracker</h1>
+          <p>No login required &middot; backed by your Google Sheet</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span class="status-pill"><span class="status-dot" id="statusDot"></span><span id="statusText">Connecting&hellip;</span></span>
+        <button class="ghost-btn" id="changeUrlBtn">Change backend URL</button>
+        <button class="primary-btn" id="manageBtn">Manage roster</button>
+      </div>
+    </header>
+
+    <div class="service-tabs">
+      <button class="service-tab active" id="tabCath" data-service="cathLab">Cath Lab</button>
+      <button class="service-tab" id="tabVasc" data-service="vascular">Vascular Surgery</button>
+    </div>
+
+    <div id="errorBanner" class="banner err" hidden></div>
+
+    <main class="layout">
+      <aside class="roster-panel">
+        <h2>Rotation order</h2>
+        <p class="panel-sub" id="rosterSub">Most overdue first</p>
+        <ol class="roster-list" id="rosterList"></ol>
+        <div class="chart-block">
+          <h3>Total assignments (tracked history)</h3>
+          <div id="barChart"></div>
+        </div>
+      </aside>
+
+      <section class="board">
+        <div class="week-nav" style="margin-bottom:14px;">
+          <button class="nav-arrow" id="prevWeek" aria-label="Previous week">&lsaquo;</button>
+          <div class="week-label" id="weekLabel">&mdash;</div>
+          <button class="nav-arrow" id="nextWeek" aria-label="Next week">&rsaquo;</button>
+          <button class="ghost-btn" id="todayBtn">This week</button>
+        </div>
+        <div class="board-scroll">
+          <div class="board-grid" id="boardGrid"></div>
+        </div>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--amber)"></span>Not yet assigned</span>
+          <span><span class="sw" style="background:var(--teal)"></span>Fairest pick for that day</span>
+          <span>Use <strong>Suggest</strong> to auto-fill with whoever is most overdue</span>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal">
+    <h2>Manage roster</h2>
+    <p class="modal-sub">Add or retire CRNAs, and set which days each one is normally in. Shared by both rotations.</p>
+    <div class="add-row">
+      <input type="text" id="newStaffName" placeholder="Full name">
+      <select id="newStaffType">
+        <option value="Permanent">Permanent</option>
+        <option value="PRN">PRN</option>
+      </select>
+    </div>
+    <div id="newStaffDaysSection">
+      <p class="panel-sub" style="margin:0 0 6px;">Days normally scheduled</p>
+      <div class="day-toggle-row" id="newStaffDays"></div>
+    </div>
+    <p class="panel-sub" id="prnNote" style="margin:0 0 6px; display:none;">PRN staff are called in as needed &mdash; no fixed days required.</p>
+    <div style="text-align:right; margin-bottom:18px;">
+      <button class="primary-btn" id="addStaffBtn" style="padding:8px 14px;">Add to roster</button>
+    </div>
+    <div id="staffManageList"></div>
+    <div class="modal-close-row">
+      <button class="icon-btn danger" id="resetAllBtn" style="float:left;">Reset all data</button>
+      <button class="ghost-btn" id="closeModalBtn">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ===== Password gate =====
+  // Change the password by editing the line below. This is a casual deterrent
+  // only (anyone who views this file's source can find it) -- not real security.
+  var SITE_PASSWORD = "Sebring4200";
+  var GATE_STORAGE_KEY = "crna_gate_authed_v1";
+
+  function initGate() {
+    var input = document.getElementById("gatePasswordInput");
+    var btn = document.getElementById("gateSubmitBtn");
+    var errorEl = document.getElementById("gateError");
+
+    function tryAuth() {
+      try { return localStorage.getItem(GATE_STORAGE_KEY) === "1"; } catch (e) { return false; }
+    }
+    function markAuthed() {
+      document.body.classList.add("authed");
+      try { localStorage.setItem(GATE_STORAGE_KEY, "1"); } catch (e) {}
+    }
+    function attempt() {
+      if (input.value === SITE_PASSWORD) {
+        errorEl.textContent = "";
+        input.classList.remove("error");
+        markAuthed();
+      } else {
+        errorEl.textContent = "Incorrect password. Check with whoever shared this link.";
+        input.classList.add("error");
+        input.value = "";
+        input.focus();
+      }
+    }
+    btn.addEventListener("click", attempt);
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") attempt(); });
+
+    if (tryAuth()) {
+      document.body.classList.add("authed");
+    } else {
+      input.focus();
+    }
+  }
+  initGate();
+
+  var DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  var DAY_ABBR = ["Mo", "Tu", "We", "Th", "Fr"];
+  var SERVICE_LABELS = { cathLab: "Cath Lab", vascular: "Vascular Surgery" };
+
+  function normalizeDays(days) {
+    if (!Array.isArray(days)) return [];
+    return days.filter(function (d) { return d >= 0 && d <= 4; }).sort();
+  }
+  function patternText(staff) {
+    if (staff.type === "PRN") return "PRN · as needed";
+    var d = normalizeDays(staff.days);
+    if (d.length === 5) return "Works all week";
+    if (!d.length) return "No days set";
+    return "Works " + d.map(function (i) { return DAY_ABBR[i]; }).join("/");
+  }
+  function isAvailableOn(staff, dayIdx) {
+    if (staff.type === "PRN") return true;
+    return normalizeDays(staff.days).indexOf(dayIdx) !== -1;
+  }
+
+  function toISO(d) {
+    var y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
+  function fromISO(s) {
+    var p = s.split("-").map(Number);
+    return new Date(p[0], p[1] - 1, p[2]);
+  }
+  function addDays(d, n) { var nd = new Date(d); nd.setDate(nd.getDate() + n); return nd; }
+  function mondayOf(d) {
+    var nd = new Date(d);
+    var day = nd.getDay();
+    var diff = day === 0 ? -6 : 1 - day;
+    nd.setDate(nd.getDate() + diff);
+    nd.setHours(0, 0, 0, 0);
+    return nd;
+  }
+  function fmtShort(d) { return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+  function fmtWeekLabel(monday) {
+    var friday = addDays(monday, 4);
+    var sameMonth = monday.getMonth() === friday.getMonth();
+    if (sameMonth) return monday.toLocaleDateString(undefined, { month: "short" }) + " " + monday.getDate() + "–" + friday.getDate() + ", " + friday.getFullYear();
+    return fmtShort(monday) + " – " + fmtShort(friday) + ", " + friday.getFullYear();
+  }
+
+  var state = {
+    staff: [],
+    assignments: { cathLab: {}, vascular: {} },
+    currentService: "cathLab",
+    weekMonday: mondayOf(new Date()),
+    apiUrl: null,
+    loaded: false
+  };
+  var todayISO = toISO(new Date());
+  var pollTimer = null;
+
+  function byId(id) { return document.getElementById(id); }
+
+  // ---------- backend ----------
+  function loadApiUrl() {
+    try { return localStorage.getItem("crna_api_url") || ""; } catch (e) { return ""; }
+  }
+  function saveApiUrl(url) {
+    try { localStorage.setItem("crna_api_url", url); } catch (e) {}
+  }
+
+  function setStatus(kind, text) {
+    var dot = byId("statusDot");
+    dot.className = "status-dot" + (kind ? " " + kind : "");
+    byId("statusText").textContent = text;
+  }
+
+  function showError(msg) {
+    var b = byId("errorBanner");
+    if (!msg) { b.hidden = true; return; }
+    b.hidden = false;
+    b.textContent = msg;
+  }
+
+  function fetchData() {
+    if (!state.apiUrl) return;
+    setStatus("busy", "Syncing…");
+    fetch(state.apiUrl, { method: "GET" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || "Unknown error");
+        state.staff = data.staff || [];
+        state.assignments.cathLab = data.cathLab || {};
+        state.assignments.vascular = data.vascular || {};
+        state.loaded = true;
+        setStatus("ok", "Synced");
+        showError(null);
+        render();
+        if (!byId("modalBackdrop").hidden) renderStaffManageList();
+      })
+      .catch(function (err) {
+        console.error(err);
+        setStatus("err", "Connection problem");
+        showError("Could not load data from the backend: " + err.message + ". Check that the Apps Script is deployed with access set to “Anyone,” then try Change backend URL to reconnect.");
+      });
+  }
+
+  function postAction(action, payload) {
+    setStatus("busy", "Saving…");
+    return fetch(state.apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: action, payload: payload })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) throw new Error(data.error || "Unknown error");
+        setStatus("ok", "Synced");
+        showError(null);
+        fetchData();
+        return data.result;
+      })
+      .catch(function (err) {
+        console.error(err);
+        setStatus("err", "Save failed");
+        showError("That change didn't save: " + err.message + ". Try again, or check the backend connection.");
+      });
+  }
+
+  // ---------- fairness ----------
+  function computeFairness(service) {
+    var assignments = state.assignments[service] || {};
+    var byId_ = {};
+    state.staff.forEach(function (s) { byId_[s.id] = { staff: s, count: 0, lastDate: null }; });
+    Object.keys(assignments).forEach(function (dateISO) {
+      var a = assignments[dateISO];
+      if (!a || !a.staffId || !byId_[a.staffId]) return;
+      var rec = byId_[a.staffId];
+      rec.count += 1;
+      if (!rec.lastDate || dateISO > rec.lastDate) rec.lastDate = dateISO;
+    });
+    var list = Object.keys(byId_).map(function (id) { return byId_[id]; });
+    list.sort(function (a, b) {
+      if (!a.staff.active && b.staff.active) return 1;
+      if (a.staff.active && !b.staff.active) return -1;
+      if (!a.lastDate && b.lastDate) return -1;
+      if (a.lastDate && !b.lastDate) return 1;
+      if (a.lastDate !== b.lastDate) return a.lastDate < b.lastDate ? -1 : 1;
+      if (a.count !== b.count) return a.count - b.count;
+      return a.staff.name.localeCompare(b.staff.name);
+    });
+    return list;
+  }
+  function activeOrderedIds(fairness) {
+    return fairness.filter(function (r) { return r.staff.active; }).map(function (r) { return r.staff.id; });
+  }
+  function staffUsedInWeek(service, monday, exceptDateISO) {
+    var used = {};
+    var assignments = state.assignments[service] || {};
+    for (var i = 0; i < 5; i++) {
+      var iso = toISO(addDays(monday, i));
+      if (iso === exceptDateISO) continue;
+      var a = assignments[iso];
+      if (a && a.staffId) used[a.staffId] = true;
+    }
+    return used;
+  }
+  function suggestFor(service, dateISO, dayIdx) {
+    var fairness = computeFairness(service);
+    var used = staffUsedInWeek(service, state.weekMonday, dateISO);
+    var order = fairness.filter(function (r) { return r.staff.active && isAvailableOn(r.staff, dayIdx); }).map(function (r) { return r.staff.id; });
+    for (var i = 0; i < order.length; i++) if (!used[order[i]]) return order[i];
+    if (order.length) return order[0];
+    var fallback = activeOrderedIds(fairness);
+    for (var j = 0; j < fallback.length; j++) if (!used[fallback[j]]) return fallback[j];
+    return fallback[0] || null;
+  }
+  function staffName(id) {
+    var s = state.staff.find(function (x) { return x.id === id; });
+    return s ? s.name : "Unknown";
+  }
+
+  // ---------- rendering ----------
+  function render() {
+    if (!state.loaded) return;
+    byId("weekLabel").textContent = fmtWeekLabel(state.weekMonday);
+    byId("rosterSub").textContent = "Most overdue for " + SERVICE_LABELS[state.currentService] + " first";
+    renderBoard();
+    renderRoster();
+    renderChart();
+  }
+
+  function renderBoard() {
+    var grid = byId("boardGrid");
+    grid.innerHTML = "";
+    var service = state.currentService;
+    var assignments = state.assignments[service] || {};
+    var fairness = computeFairness(service);
+
+    for (var i = 0; i < 5; i++) {
+      var d = addDays(state.weekMonday, i);
+      var iso = toISO(d);
+      var current = assignments[iso];
+      var card = document.createElement("div");
+      card.className = "day-card" + (iso === todayISO ? " is-today" : "");
+
+      var head = document.createElement("div");
+      head.className = "day-head";
+      var nm = document.createElement("div"); nm.className = "day-name"; nm.textContent = DAY_NAMES[i];
+      var dt = document.createElement("div"); dt.className = "day-date"; dt.textContent = fmtShort(d);
+      head.appendChild(nm); head.appendChild(dt);
+      card.appendChild(head);
+
+      var select = document.createElement("select");
+      select.className = "day-select" + ((!current || (!current.staffId && !current.skip)) ? " unfilled" : "");
+      select.dataset.date = iso; select.dataset.dayIdx = i;
+
+      var optNone = document.createElement("option"); optNone.value = ""; optNone.textContent = "— Unassigned —"; select.appendChild(optNone);
+      var optSkip = document.createElement("option"); optSkip.value = "__SKIP__"; optSkip.textContent = "No case today"; select.appendChild(optSkip);
+
+      var grpHere = document.createElement("optgroup"); grpHere.label = "Available today";
+      var grpElse = document.createElement("optgroup"); grpElse.label = "Not usually scheduled today";
+      fairness.filter(function (r) { return r.staff.active; }).forEach(function (r) {
+        var opt = document.createElement("option");
+        opt.value = r.staff.id;
+        opt.textContent = r.staff.name + (r.staff.type === "PRN" ? " · PRN" : "");
+        if (isAvailableOn(r.staff, i)) grpHere.appendChild(opt); else grpElse.appendChild(opt);
+      });
+      if (grpHere.children.length) select.appendChild(grpHere);
+      if (grpElse.children.length) select.appendChild(grpElse);
+
+      if (current && current.skip) select.value = "__SKIP__";
+      else if (current && current.staffId) select.value = current.staffId;
+      else select.value = "";
+
+      select.addEventListener("change", function (e) {
+        var dateISO = e.target.dataset.date, val = e.target.value;
+        if (val === "") postAction("setAssignment", { service: service, date: dateISO, staffId: null, staffName: null, skip: false });
+        else if (val === "__SKIP__") postAction("setAssignment", { service: service, date: dateISO, staffId: null, staffName: null, skip: true });
+        else postAction("setAssignment", { service: service, date: dateISO, staffId: val, staffName: staffName(val), skip: false });
+      });
+      card.appendChild(select);
+
+      var foot = document.createElement("div"); foot.className = "day-foot";
+      var tag = document.createElement("span");
+      var fairestId = suggestFor(service, iso, i);
+      if (current && current.staffId) {
+        tag.className = "assigned-tag" + (current.staffId === fairestId ? " fair" : "");
+        tag.textContent = current.staffId === fairestId ? "Fairest pick" : "Assigned";
+      } else if (current && current.skip) { tag.className = "assigned-tag"; tag.textContent = "Skipped"; }
+      else { tag.className = "assigned-tag"; tag.textContent = "Open"; }
+
+      var suggestBtn = document.createElement("button");
+      suggestBtn.className = "suggest-btn"; suggestBtn.textContent = "Suggest";
+      suggestBtn.dataset.date = iso; suggestBtn.dataset.dayIdx = i;
+      suggestBtn.addEventListener("click", function (e) {
+        var dateISO = e.target.dataset.date, dayIdx = Number(e.target.dataset.dayIdx);
+        var pick = suggestFor(service, dateISO, dayIdx);
+        if (pick) postAction("setAssignment", { service: service, date: dateISO, staffId: pick, staffName: staffName(pick), skip: false });
+      });
+      foot.appendChild(tag); foot.appendChild(suggestBtn);
+      card.appendChild(foot);
+      grid.appendChild(card);
+    }
+  }
+
+  function renderRoster() {
+    var list = byId("rosterList");
+    list.innerHTML = "";
+    var fairness = computeFairness(state.currentService).filter(function (r) { return r.staff.active; });
+    if (!fairness.length) {
+      var li = document.createElement("li"); li.className = "empty-note"; li.textContent = "Add CRNAs to start tracking the rotation."; list.appendChild(li); return;
+    }
+    fairness.forEach(function (r, idx) {
+      var li = document.createElement("li"); li.className = "roster-row";
+      var rank = document.createElement("span"); rank.className = "roster-rank"; rank.textContent = String(idx + 1);
+      var dot = document.createElement("span"); dot.className = "roster-dot" + (idx < 2 ? " due" : "");
+      var nameWrap = document.createElement("span"); nameWrap.className = "roster-name";
+      var nmEl = document.createElement("span"); nmEl.className = "nm"; nmEl.textContent = r.staff.name;
+      var metaEl = document.createElement("span"); metaEl.className = "meta";
+      var lastText = r.lastDate ? ("Last: " + fmtShort(fromISO(r.lastDate))) : "Never assigned";
+      metaEl.textContent = patternText(r.staff) + " · " + lastText;
+      var typeTag = document.createElement("span"); typeTag.className = "type-tag" + (r.staff.type === "PRN" ? " prn" : ""); typeTag.textContent = r.staff.type === "PRN" ? "PRN" : "Perm";
+      nmEl.appendChild(typeTag);
+      nameWrap.appendChild(nmEl); nameWrap.appendChild(metaEl);
+      var count = document.createElement("span"); count.className = "roster-count"; count.textContent = r.count;
+      li.appendChild(rank); li.appendChild(dot); li.appendChild(nameWrap); li.appendChild(count);
+      list.appendChild(li);
+    });
+  }
+
+  function renderChart() {
+    var wrap = byId("barChart"); wrap.innerHTML = "";
+    var fairness = computeFairness(state.currentService).filter(function (r) { return r.staff.active; });
+    if (!fairness.length) return;
+    var byCount = fairness.slice().sort(function (a, b) { return b.count - a.count; });
+    var max = Math.max(1, byCount[0].count);
+    byCount.forEach(function (r) {
+      var row = document.createElement("div"); row.className = "bar-row";
+      var label = document.createElement("div"); label.className = "bar-label"; label.textContent = r.staff.name.split(" ")[0];
+      var track = document.createElement("div"); track.className = "bar-track";
+      var fill = document.createElement("div"); fill.className = "bar-fill"; fill.style.width = Math.max(4, (r.count / max) * 100) + "%";
+      track.appendChild(fill);
+      var num = document.createElement("div"); num.className = "bar-num"; num.textContent = r.count;
+      row.appendChild(label); row.appendChild(track); row.appendChild(num);
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderStaffManageList() {
+    var wrap = byId("staffManageList"); wrap.innerHTML = "";
+    var sorted = state.staff.slice().sort(function (a, b) { if (a.active !== b.active) return a.active ? -1 : 1; return a.name.localeCompare(b.name); });
+    if (!sorted.length) { var p = document.createElement("p"); p.className = "empty-note"; p.textContent = "No CRNAs added yet."; wrap.appendChild(p); return; }
+    sorted.forEach(function (s) {
+      var row = document.createElement("div"); row.className = "staff-manage-row" + (s.active ? "" : " inactive");
+      var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = s.name + "  ";
+      var tag = document.createElement("span"); tag.className = "type-tag" + (s.type === "PRN" ? " prn" : ""); tag.textContent = s.type === "PRN" ? "PRN" : "Perm";
+      nm.appendChild(tag);
+      var chips;
+      if (s.type === "PRN") {
+        chips = document.createElement("span"); chips.className = "type-tag"; chips.style.color = "var(--muted)"; chips.textContent = "As needed";
+      } else {
+        chips = document.createElement("div"); chips.className = "day-chips-sm";
+        var sDays = normalizeDays(s.days);
+        DAY_ABBR.forEach(function (abbr, i) {
+          var chip = document.createElement("button"); chip.type = "button";
+          chip.className = "day-chip-sm" + (sDays.indexOf(i) !== -1 ? " on" : "");
+          chip.textContent = abbr; chip.title = DAY_NAMES[i];
+          chip.addEventListener("click", function () { toggleStaffDay(s.id, i); });
+          chips.appendChild(chip);
+        });
+      }
+      var toggleBtn = document.createElement("button"); toggleBtn.className = "icon-btn"; toggleBtn.textContent = s.active ? "Retire" : "Reactivate";
+      toggleBtn.addEventListener("click", function () { postAction("updateStaff", { id: s.id, fields: { active: !s.active } }); });
+      row.appendChild(nm); row.appendChild(chips); row.appendChild(toggleBtn);
+      wrap.appendChild(row);
+    });
+  }
+
+  function toggleStaffDay(id, dayIndex) {
+    var s = state.staff.find(function (x) { return x.id === id; });
+    if (!s) return;
+    var current = normalizeDays(s.days);
+    var idx = current.indexOf(dayIndex);
+    var next;
+    if (idx === -1) next = current.concat([dayIndex]).sort(); else { next = current.slice(); next.splice(idx, 1); }
+    if (!next.length) return;
+    s.days = next; renderStaffManageList(); renderRoster(); renderBoard();
+    postAction("updateStaff", { id: id, fields: { days: next } });
+  }
+
+  // ---------- add-staff day picker ----------
+  var newStaffDaysSelected = [];
+  function renderNewStaffDayToggle() {
+    var wrap = byId("newStaffDays"); wrap.innerHTML = "";
+    DAY_ABBR.forEach(function (abbr, i) {
+      var btn = document.createElement("button"); btn.type = "button";
+      btn.className = "day-chip" + (newStaffDaysSelected.indexOf(i) !== -1 ? " on" : "");
+      btn.textContent = abbr;
+      btn.addEventListener("click", function () {
+        var idx = newStaffDaysSelected.indexOf(i);
+        if (idx === -1) newStaffDaysSelected.push(i); else newStaffDaysSelected.splice(idx, 1);
+        newStaffDaysSelected.sort(); renderNewStaffDayToggle();
+      });
+      wrap.appendChild(btn);
+    });
+    var fullWeekBtn = document.createElement("button"); fullWeekBtn.type = "button"; fullWeekBtn.className = "ghost-btn";
+    fullWeekBtn.style.fontSize = "11px"; fullWeekBtn.style.padding = "4px 10px"; fullWeekBtn.textContent = "Full week";
+    fullWeekBtn.addEventListener("click", function () { newStaffDaysSelected = [0, 1, 2, 3, 4]; renderNewStaffDayToggle(); });
+    wrap.appendChild(fullWeekBtn);
+  }
+
+  function updateNewStaffTypeUI() {
+    var isPRN = byId("newStaffType").value === "PRN";
+    byId("newStaffDaysSection").style.display = isPRN ? "none" : "";
+    byId("prnNote").style.display = isPRN ? "" : "none";
+  }
+
+  // ---------- wiring ----------
+  byId("prevWeek").addEventListener("click", function () { state.weekMonday = addDays(state.weekMonday, -7); render(); });
+  byId("nextWeek").addEventListener("click", function () { state.weekMonday = addDays(state.weekMonday, 7); render(); });
+  byId("todayBtn").addEventListener("click", function () { state.weekMonday = mondayOf(new Date()); render(); });
+  byId("manageBtn").addEventListener("click", function () { renderStaffManageList(); byId("modalBackdrop").hidden = false; });
+  byId("closeModalBtn").addEventListener("click", function () { byId("modalBackdrop").hidden = true; });
+  byId("modalBackdrop").addEventListener("click", function (e) { if (e.target === byId("modalBackdrop")) byId("modalBackdrop").hidden = true; });
+  byId("resetAllBtn").addEventListener("click", function () {
+    if (!confirm("This permanently deletes every CRNA and every logged assignment for everyone using this page. This can't be undone. Continue?")) return;
+    postAction("resetAll", {});
+  });
+  byId("newStaffType").addEventListener("change", updateNewStaffTypeUI);
+  byId("addStaffBtn").addEventListener("click", function () {
+    var nameEl = byId("newStaffName"), typeEl = byId("newStaffType");
+    var name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return; }
+    if (typeEl.value !== "PRN" && !newStaffDaysSelected.length) {
+      byId("newStaffDays").style.outline = "1px solid var(--danger)";
+      setTimeout(function () { byId("newStaffDays").style.outline = "none"; }, 1200);
+      return;
+    }
+    postAction("addStaff", { name: name, type: typeEl.value, days: typeEl.value === "PRN" ? [] : newStaffDaysSelected });
+    nameEl.value = ""; newStaffDaysSelected = []; renderNewStaffDayToggle(); nameEl.focus();
+  });
+  byId("newStaffName").addEventListener("keydown", function (e) { if (e.key === "Enter") byId("addStaffBtn").click(); });
+
+  byId("tabCath").addEventListener("click", function () { switchService("cathLab"); });
+  byId("tabVasc").addEventListener("click", function () { switchService("vascular"); });
+  function switchService(service) {
+    state.currentService = service;
+    byId("tabCath").classList.toggle("active", service === "cathLab");
+    byId("tabVasc").classList.toggle("active", service === "vascular");
+    render();
+  }
+
+  byId("changeUrlBtn").addEventListener("click", function () {
+    if (pollTimer) clearInterval(pollTimer);
+    byId("mainScreen").hidden = true;
+    byId("setupScreen").hidden = false;
+    byId("setupUrlInput").value = state.apiUrl || "";
+  });
+  byId("setupSaveBtn").addEventListener("click", function () {
+    var url = byId("setupUrlInput").value.trim();
+    if (!url) return;
+    saveApiUrl(url);
+    startApp(url);
+  });
+
+  function startApp(url) {
+    state.apiUrl = url;
+    byId("setupScreen").hidden = true;
+    byId("mainScreen").hidden = false;
+    renderNewStaffDayToggle();
+    updateNewStaffTypeUI();
+    fetchData();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(fetchData, 25000);
+  }
+
+  // ---------- init ----------
+  var saved = loadApiUrl();
+  if (saved) {
+    startApp(saved);
+  } else {
+    byId("setupScreen").hidden = false;
+  }
+})();
+</script>
+</body>
+</html>
