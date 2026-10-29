@@ -362,8 +362,9 @@
   function byId(id) { return document.getElementById(id); }
 
   // ---------- backend ----------
+    var DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyER-fNGfTLwFL4vtyDhTBygTQAHpSLSHoGkkNS2heflCVXhThfIJJ7WSyakjp35WV0MA/exec";
   function loadApiUrl() {
-    try { return localStorage.getItem("crna_api_url") || ""; } catch (e) { return ""; }
+    try { return localStorage.getItem("crna_api_url") || DEFAULT_API_URL; } catch (e) { return DEFAULT_API_URL; }
   }
   function saveApiUrl(url) {
     try { localStorage.setItem("crna_api_url", url); } catch (e) {}
