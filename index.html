@@ -521,6 +521,23 @@
     }
     return null;
   }
+  // How many working days after time off someone is left alone by Suggest (change the 2 to 1, 3, etc.).
+  var GRACE_DAYS = 2;
+  function justBack(staffId, dateISO) {
+    for (var i = 0; i < state.timeOff.length; i++) {
+      var t = state.timeOff[i];
+      if (t.staffId !== staffId || t.end >= dateISO) continue;
+      var d = fromISO(t.end), n = 0;
+      while (n < GRACE_DAYS) {
+        d = addDays(d, 1);
+        var g = d.getDay();
+        if (g === 0 || g === 6) continue;
+        n++;
+        if (toISO(d) === dateISO) return true;
+      }
+    }
+    return false;
+  }
   function onOtherService(service, staffId, dateISO) {
     var a = (state.assignments[otherService(service)] || {})[dateISO];
     return !!(a && a.staffId === staffId);
@@ -532,14 +549,23 @@
     var dayIdx = dayIndexOf(fromISO(dateISO));
     var fairness = computeFairness(service, dateISO);
     var used = staffUsedInWeek(service, mondayOf(fromISO(dateISO)), dateISO);
+    var usedOther = staffUsedInWeek(otherService(service), mondayOf(fromISO(dateISO)), null);
     var base = fairness.filter(function (r) {
       return r.staff.active && !timeOffFor(r.staff.id, dateISO) && !onOtherService(service, r.staff.id, dateISO);
     }).map(function (r) { return r.staff; });
-    var tier1 = base.filter(function (s) { return isAvailableOn(s, dayIdx) && !used[s.id]; });
-    if (tier1.length) return tier1.map(function (s) { return s.id; });
-    var tier2 = base.filter(function (s) { return isAvailableOn(s, dayIdx); });
-    if (tier2.length) return tier2.map(function (s) { return s.id; });
-    return base.map(function (s) { return s.id; });
+    // Rules are applied strictly first, then relaxed one at a time if nobody is left.
+    var tiers = [
+      function (s) { return isAvailableOn(s, dayIdx) && !used[s.id] && !usedOther[s.id] && !justBack(s.id, dateISO); },
+      function (s) { return isAvailableOn(s, dayIdx) && !used[s.id] && !justBack(s.id, dateISO); },
+      function (s) { return isAvailableOn(s, dayIdx) && !used[s.id]; },
+      function (s) { return isAvailableOn(s, dayIdx); },
+      function () { return true; }
+    ];
+    for (var t = 0; t < tiers.length; t++) {
+      var pool = base.filter(tiers[t]);
+      if (pool.length) return pool.map(function (s) { return s.id; });
+    }
+    return [];
   }
   // Each click moves to the next person down the list (wrapping to the top).
   function nextSuggestion(service, dateISO) {
@@ -612,6 +638,7 @@
       }
       var label = r.staff.name + (r.staff.type === "PRN" ? " \u00b7 PRN" : "");
       if (onOtherService(service, r.staff.id, iso)) label += " \u00b7 on " + otherLabel;
+      else if (justBack(r.staff.id, iso)) label += " \u00b7 just back";
       opt.textContent = label;
       if (isAvailableOn(r.staff, i)) grpHere.appendChild(opt); else grpElse.appendChild(opt);
     });
