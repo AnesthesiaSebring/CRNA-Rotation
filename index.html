@@ -132,7 +132,7 @@
 
   .modal-backdrop { position: fixed; inset: 0; background: rgba(16,22,28,0.5); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
   .modal-backdrop[hidden] { display: none; }
-  .modal { background: var(--surface); border-radius: 6px; width: 100%; max-width: 480px; max-height: 86vh; overflow-y: auto; padding: 22px; }
+  .modal { background: var(--surface); border-radius: 6px; width: 100%; max-width: 560px; max-height: 86vh; overflow-y: auto; padding: 22px; }
   .modal h2 { font-size: 16px; margin: 0 0 4px; }
   .modal .modal-sub { font-size: 12.5px; color: var(--muted); margin: 0 0 18px; }
   .add-row { display: flex; gap: 8px; margin-bottom: 10px; }
@@ -152,6 +152,20 @@
   .icon-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
   .modal-close-row { text-align: right; margin-top: 18px; }
   .empty-note { font-size: 13px; color: var(--muted); padding: 20px 0; text-align: center; }
+
+  .view-toggle { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 3px; overflow: hidden; margin-left: auto; }
+  .view-toggle button { border: none; background: var(--surface); color: var(--muted); padding: 6px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .view-toggle button.active { background: var(--teal-soft); color: var(--teal-ink); font-weight: 600; }
+  .dow-head { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 2px; }
+  .day-card.compact { padding: 10px; gap: 8px; }
+  .day-card.compact .day-name { font-family: var(--font-mono); font-size: 13px; }
+  .day-card.empty { background: transparent; border-style: dashed; opacity: 0.35; }
+  .assigned-tag.warn { color: var(--danger); font-weight: 600; }
+  .type-select { padding: 3px 4px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font-size: 11px; font-family: inherit; }
+  .section-title { font-size: 13px; font-weight: 600; margin: 20px 0 4px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .form-grid label { font-size: 11.5px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+  .form-grid select, .form-grid input { padding: 7px 8px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit; }
 </style>
 </head>
 <body>
@@ -217,6 +231,10 @@
           <div class="week-label" id="weekLabel">&mdash;</div>
           <button class="nav-arrow" id="nextWeek" aria-label="Next week">&rsaquo;</button>
           <button class="ghost-btn" id="todayBtn">This week</button>
+          <div class="view-toggle">
+            <button id="viewWeekBtn" class="active">Week</button>
+            <button id="viewMonthBtn">Month</button>
+          </div>
         </div>
         <div class="board-scroll">
           <div class="board-grid" id="boardGrid"></div>
@@ -224,7 +242,7 @@
         <div class="legend">
           <span><span class="sw" style="background:var(--amber)"></span>Not yet assigned</span>
           <span><span class="sw" style="background:var(--teal)"></span>Fairest pick for that day</span>
-          <span>Use <strong>Suggest</strong> to auto-fill with whoever is most overdue</span>
+          <span>Click <strong>Suggest</strong> to fill with whoever is most overdue &mdash; click again for the next person down the list</span>
         </div>
       </section>
     </main>
@@ -251,6 +269,24 @@
       <button class="primary-btn" id="addStaffBtn" style="padding:8px 14px;">Add to roster</button>
     </div>
     <div id="staffManageList"></div>
+
+    <h3 class="section-title">Time off</h3>
+    <p class="panel-sub" style="margin:0 0 10px;">People on time off are never suggested and show as unavailable on those dates.</p>
+    <div class="form-grid">
+      <label>Who<select id="toStaff"></select></label>
+      <label>Reason<select id="toReason">
+        <option value="Vacation">Vacation</option>
+        <option value="Sick leave">Sick leave</option>
+        <option value="Conference / CE">Conference / CE</option>
+        <option value="Other">Other</option>
+      </select></label>
+      <label>First day off<input type="date" id="toStart"></label>
+      <label>Last day off<input type="date" id="toEnd"></label>
+    </div>
+    <div style="text-align:right; margin-bottom:10px;">
+      <button class="primary-btn" id="toAddBtn" style="padding:8px 14px;">Add time off</button>
+    </div>
+    <div id="toList"></div>
     <div class="modal-close-row">
       <button class="icon-btn danger" id="resetAllBtn" style="float:left;">Reset all data</button>
       <button class="ghost-btn" id="closeModalBtn">Done</button>
@@ -352,6 +388,9 @@
     staff: [],
     assignments: { cathLab: {}, vascular: {} },
     currentService: "cathLab",
+    timeOff: [],
+    view: "week",
+    monthStart: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     weekMonday: mondayOf(new Date()),
     apiUrl: null,
     loaded: false
@@ -362,7 +401,7 @@
   function byId(id) { return document.getElementById(id); }
 
   // ---------- backend ----------
-    var DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyER-fNGfTLwFL4vtyDhTBygTQAHpSLSHoGkkNS2heflCVXhThfIJJ7WSyakjp35WV0MA/exec";
+  var DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyER-fNGfTLwFL4vtyDhTBygTQAHpSLSHoGkkNS2heflCVXhThfIJJ7WSyakjp35WV0MA/exec";
   function loadApiUrl() {
     try { return localStorage.getItem("crna_api_url") || DEFAULT_API_URL; } catch (e) { return DEFAULT_API_URL; }
   }
@@ -393,6 +432,7 @@
         state.staff = data.staff || [];
         state.assignments.cathLab = data.cathLab || {};
         state.assignments.vascular = data.vascular || {};
+        state.timeOff = data.timeOff || [];
         state.loaded = true;
         setStatus("ok", "Synced");
         showError(null);
@@ -429,12 +469,13 @@
   }
 
   // ---------- fairness ----------
-  function computeFairness(service) {
+  function computeFairness(service, exceptDateISO) {
     var assignments = state.assignments[service] || {};
     var byId_ = {};
     state.staff.forEach(function (s) { byId_[s.id] = { staff: s, count: 0, lastDate: null }; });
     Object.keys(assignments).forEach(function (dateISO) {
       var a = assignments[dateISO];
+      if (dateISO === exceptDateISO) return;
       if (!a || !a.staffId || !byId_[a.staffId]) return;
       var rec = byId_[a.staffId];
       rec.count += 1;
@@ -466,15 +507,47 @@
     }
     return used;
   }
-  function suggestFor(service, dateISO, dayIdx) {
-    var fairness = computeFairness(service);
-    var used = staffUsedInWeek(service, state.weekMonday, dateISO);
-    var order = fairness.filter(function (r) { return r.staff.active && isAvailableOn(r.staff, dayIdx); }).map(function (r) { return r.staff.id; });
-    for (var i = 0; i < order.length; i++) if (!used[order[i]]) return order[i];
-    if (order.length) return order[0];
-    var fallback = activeOrderedIds(fairness);
-    for (var j = 0; j < fallback.length; j++) if (!used[fallback[j]]) return fallback[j];
-    return fallback[0] || null;
+  function otherService(service) { return service === "cathLab" ? "vascular" : "cathLab"; }
+  function dayIndexOf(d) { return (d.getDay() + 6) % 7; }
+  function firstWeekday(d) {
+    var nd = new Date(d);
+    while (nd.getDay() === 0 || nd.getDay() === 6) nd.setDate(nd.getDate() + 1);
+    return nd;
+  }
+  function timeOffFor(staffId, dateISO) {
+    for (var i = 0; i < state.timeOff.length; i++) {
+      var t = state.timeOff[i];
+      if (t.staffId === staffId && dateISO >= t.start && dateISO <= t.end) return t;
+    }
+    return null;
+  }
+  function onOtherService(service, staffId, dateISO) {
+    var a = (state.assignments[otherService(service)] || {})[dateISO];
+    return !!(a && a.staffId === staffId);
+  }
+  // Everyone who could reasonably take this day, most overdue first.
+  // Hard rules: active, not on time off, not already on the other rotation that day.
+  // Soft rules (relaxed only if nobody is left): works that weekday, not already used this week.
+  function suggestionCandidates(service, dateISO) {
+    var dayIdx = dayIndexOf(fromISO(dateISO));
+    var fairness = computeFairness(service, dateISO);
+    var used = staffUsedInWeek(service, mondayOf(fromISO(dateISO)), dateISO);
+    var base = fairness.filter(function (r) {
+      return r.staff.active && !timeOffFor(r.staff.id, dateISO) && !onOtherService(service, r.staff.id, dateISO);
+    }).map(function (r) { return r.staff; });
+    var tier1 = base.filter(function (s) { return isAvailableOn(s, dayIdx) && !used[s.id]; });
+    if (tier1.length) return tier1.map(function (s) { return s.id; });
+    var tier2 = base.filter(function (s) { return isAvailableOn(s, dayIdx); });
+    if (tier2.length) return tier2.map(function (s) { return s.id; });
+    return base.map(function (s) { return s.id; });
+  }
+  // Each click moves to the next person down the list (wrapping to the top).
+  function nextSuggestion(service, dateISO) {
+    var cands = suggestionCandidates(service, dateISO);
+    if (!cands.length) return null;
+    var a = (state.assignments[service] || {})[dateISO];
+    var idx = (a && a.staffId) ? cands.indexOf(a.staffId) : -1;
+    return cands[(idx + 1) % cands.length];
   }
   function staffName(id) {
     var s = state.staff.find(function (x) { return x.id === id; });
@@ -484,84 +557,145 @@
   // ---------- rendering ----------
   function render() {
     if (!state.loaded) return;
-    byId("weekLabel").textContent = fmtWeekLabel(state.weekMonday);
+    var isMonth = state.view === "month";
+    byId("weekLabel").textContent = isMonth
+      ? state.monthStart.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+      : fmtWeekLabel(state.weekMonday);
+    byId("todayBtn").textContent = isMonth ? "This month" : "This week";
+    byId("prevWeek").setAttribute("aria-label", isMonth ? "Previous month" : "Previous week");
+    byId("nextWeek").setAttribute("aria-label", isMonth ? "Next month" : "Next week");
+    byId("viewWeekBtn").classList.toggle("active", !isMonth);
+    byId("viewMonthBtn").classList.toggle("active", isMonth);
     byId("rosterSub").textContent = "Most overdue for " + SERVICE_LABELS[state.currentService] + " first";
     renderBoard();
     renderRoster();
     renderChart();
   }
 
+  function buildDayCard(service, d, compact) {
+    var iso = toISO(d);
+    var i = dayIndexOf(d);
+    var assignments = state.assignments[service] || {};
+    var fairness = computeFairness(service);
+    var current = assignments[iso];
+    var otherLabel = SERVICE_LABELS[otherService(service)];
+
+    var card = document.createElement("div");
+    card.className = "day-card" + (iso === todayISO ? " is-today" : "") + (compact ? " compact" : "");
+
+    var head = document.createElement("div");
+    head.className = "day-head";
+    var nm = document.createElement("div"); nm.className = "day-name"; nm.textContent = compact ? String(d.getDate()) : DAY_NAMES[i];
+    var dt = document.createElement("div"); dt.className = "day-date"; dt.textContent = compact ? "" : fmtShort(d);
+    head.appendChild(nm); head.appendChild(dt);
+    card.appendChild(head);
+
+    var select = document.createElement("select");
+    select.className = "day-select" + ((!current || (!current.staffId && !current.skip)) ? " unfilled" : "");
+    select.dataset.date = iso; select.dataset.dayIdx = i;
+
+    var optNone = document.createElement("option"); optNone.value = ""; optNone.textContent = "\u2014 Unassigned \u2014"; select.appendChild(optNone);
+    var optSkip = document.createElement("option"); optSkip.value = "__SKIP__"; optSkip.textContent = "No case today"; select.appendChild(optSkip);
+
+    var grpHere = document.createElement("optgroup"); grpHere.label = "Available today";
+    var grpElse = document.createElement("optgroup"); grpElse.label = "Not usually scheduled today";
+    var grpOff = document.createElement("optgroup"); grpOff.label = "Unavailable (time off)";
+    fairness.filter(function (r) { return r.staff.active; }).forEach(function (r) {
+      var opt = document.createElement("option");
+      opt.value = r.staff.id;
+      var off = timeOffFor(r.staff.id, iso);
+      if (off) {
+        opt.textContent = r.staff.name + " \u2014 " + off.reason;
+        opt.disabled = true;
+        grpOff.appendChild(opt);
+        return;
+      }
+      var label = r.staff.name + (r.staff.type === "PRN" ? " \u00b7 PRN" : "");
+      if (onOtherService(service, r.staff.id, iso)) label += " \u00b7 on " + otherLabel;
+      opt.textContent = label;
+      if (isAvailableOn(r.staff, i)) grpHere.appendChild(opt); else grpElse.appendChild(opt);
+    });
+    if (grpHere.children.length) select.appendChild(grpHere);
+    if (grpElse.children.length) select.appendChild(grpElse);
+    if (grpOff.children.length) select.appendChild(grpOff);
+
+    if (current && current.skip) select.value = "__SKIP__";
+    else if (current && current.staffId) select.value = current.staffId;
+    else select.value = "";
+
+    select.addEventListener("change", function (e) {
+      var dateISO = e.target.dataset.date, val = e.target.value;
+      if (val === "") postAction("setAssignment", { service: service, date: dateISO, staffId: null, staffName: null, skip: false });
+      else if (val === "__SKIP__") postAction("setAssignment", { service: service, date: dateISO, staffId: null, staffName: null, skip: true });
+      else postAction("setAssignment", { service: service, date: dateISO, staffId: val, staffName: staffName(val), skip: false });
+    });
+    card.appendChild(select);
+
+    var foot = document.createElement("div"); foot.className = "day-foot";
+    var tag = document.createElement("span");
+    if (current && current.staffId) {
+      var off2 = timeOffFor(current.staffId, iso);
+      if (off2) {
+        tag.className = "assigned-tag warn"; tag.textContent = "\u26a0 " + off2.reason;
+      } else if (onOtherService(service, current.staffId, iso)) {
+        tag.className = "assigned-tag warn"; tag.textContent = "\u26a0 Also on " + otherLabel;
+      } else {
+        var fairestId = suggestionCandidates(service, iso)[0];
+        tag.className = "assigned-tag" + (current.staffId === fairestId ? " fair" : "");
+        tag.textContent = current.staffId === fairestId ? "Fairest pick" : "Assigned";
+      }
+    } else if (current && current.skip) { tag.className = "assigned-tag"; tag.textContent = "Skipped"; }
+    else { tag.className = "assigned-tag"; tag.textContent = "Open"; }
+
+    var suggestBtn = document.createElement("button");
+    suggestBtn.className = "suggest-btn"; suggestBtn.textContent = "Suggest";
+    suggestBtn.addEventListener("click", function () {
+      var pick = nextSuggestion(service, iso);
+      if (!pick) return;
+      state.assignments[service][iso] = { staffId: pick, staffName: staffName(pick), skip: false };
+      render();
+      postAction("setAssignment", { service: service, date: iso, staffId: pick, staffName: staffName(pick), skip: false });
+    });
+    foot.appendChild(tag); foot.appendChild(suggestBtn);
+    card.appendChild(foot);
+    return card;
+  }
+
   function renderBoard() {
     var grid = byId("boardGrid");
     grid.innerHTML = "";
     var service = state.currentService;
-    var assignments = state.assignments[service] || {};
-    var fairness = computeFairness(service);
+    if (state.view === "month") {
+      grid.classList.add("month");
+      renderMonthGrid(grid, service);
+      return;
+    }
+    grid.classList.remove("month");
+    for (var i = 0; i < 5; i++) grid.appendChild(buildDayCard(service, addDays(state.weekMonday, i), false));
+  }
 
-    for (var i = 0; i < 5; i++) {
-      var d = addDays(state.weekMonday, i);
-      var iso = toISO(d);
-      var current = assignments[iso];
-      var card = document.createElement("div");
-      card.className = "day-card" + (iso === todayISO ? " is-today" : "");
-
-      var head = document.createElement("div");
-      head.className = "day-head";
-      var nm = document.createElement("div"); nm.className = "day-name"; nm.textContent = DAY_NAMES[i];
-      var dt = document.createElement("div"); dt.className = "day-date"; dt.textContent = fmtShort(d);
-      head.appendChild(nm); head.appendChild(dt);
-      card.appendChild(head);
-
-      var select = document.createElement("select");
-      select.className = "day-select" + ((!current || (!current.staffId && !current.skip)) ? " unfilled" : "");
-      select.dataset.date = iso; select.dataset.dayIdx = i;
-
-      var optNone = document.createElement("option"); optNone.value = ""; optNone.textContent = "— Unassigned —"; select.appendChild(optNone);
-      var optSkip = document.createElement("option"); optSkip.value = "__SKIP__"; optSkip.textContent = "No case today"; select.appendChild(optSkip);
-
-      var grpHere = document.createElement("optgroup"); grpHere.label = "Available today";
-      var grpElse = document.createElement("optgroup"); grpElse.label = "Not usually scheduled today";
-      fairness.filter(function (r) { return r.staff.active; }).forEach(function (r) {
-        var opt = document.createElement("option");
-        opt.value = r.staff.id;
-        opt.textContent = r.staff.name + (r.staff.type === "PRN" ? " · PRN" : "");
-        if (isAvailableOn(r.staff, i)) grpHere.appendChild(opt); else grpElse.appendChild(opt);
-      });
-      if (grpHere.children.length) select.appendChild(grpHere);
-      if (grpElse.children.length) select.appendChild(grpElse);
-
-      if (current && current.skip) select.value = "__SKIP__";
-      else if (current && current.staffId) select.value = current.staffId;
-      else select.value = "";
-
-      select.addEventListener("change", function (e) {
-        var dateISO = e.target.dataset.date, val = e.target.value;
-        if (val === "") postAction("setAssignment", { service: service, date: dateISO, staffId: null, staffName: null, skip: false });
-        else if (val === "__SKIP__") postAction("setAssignment", { service: service, date: dateISO, staffId: null, staffName: null, skip: true });
-        else postAction("setAssignment", { service: service, date: dateISO, staffId: val, staffName: staffName(val), skip: false });
-      });
-      card.appendChild(select);
-
-      var foot = document.createElement("div"); foot.className = "day-foot";
-      var tag = document.createElement("span");
-      var fairestId = suggestFor(service, iso, i);
-      if (current && current.staffId) {
-        tag.className = "assigned-tag" + (current.staffId === fairestId ? " fair" : "");
-        tag.textContent = current.staffId === fairestId ? "Fairest pick" : "Assigned";
-      } else if (current && current.skip) { tag.className = "assigned-tag"; tag.textContent = "Skipped"; }
-      else { tag.className = "assigned-tag"; tag.textContent = "Open"; }
-
-      var suggestBtn = document.createElement("button");
-      suggestBtn.className = "suggest-btn"; suggestBtn.textContent = "Suggest";
-      suggestBtn.dataset.date = iso; suggestBtn.dataset.dayIdx = i;
-      suggestBtn.addEventListener("click", function (e) {
-        var dateISO = e.target.dataset.date, dayIdx = Number(e.target.dataset.dayIdx);
-        var pick = suggestFor(service, dateISO, dayIdx);
-        if (pick) postAction("setAssignment", { service: service, date: dateISO, staffId: pick, staffName: staffName(pick), skip: false });
-      });
-      foot.appendChild(tag); foot.appendChild(suggestBtn);
-      card.appendChild(foot);
-      grid.appendChild(card);
+  function renderMonthGrid(grid, service) {
+    DAY_NAMES.forEach(function (n) {
+      var h = document.createElement("div"); h.className = "dow-head"; h.textContent = n; grid.appendChild(h);
+    });
+    var y = state.monthStart.getFullYear(), m = state.monthStart.getMonth();
+    var monday = mondayOf(new Date(y, m, 1));
+    var lastDay = new Date(y, m + 1, 0);
+    while (monday <= lastDay) {
+      var days = [], any = false;
+      for (var i = 0; i < 5; i++) {
+        var d = addDays(monday, i);
+        var inMonth = d.getMonth() === m;
+        if (inMonth) any = true;
+        days.push({ d: d, inMonth: inMonth });
+      }
+      if (any) {
+        days.forEach(function (c) {
+          if (c.inMonth) { grid.appendChild(buildDayCard(service, c.d, true)); return; }
+          var empty = document.createElement("div"); empty.className = "day-card empty compact"; grid.appendChild(empty);
+        });
+      }
+      monday = addDays(monday, 7);
     }
   }
 
@@ -615,8 +749,19 @@
     sorted.forEach(function (s) {
       var row = document.createElement("div"); row.className = "staff-manage-row" + (s.active ? "" : " inactive");
       var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = s.name + "  ";
-      var tag = document.createElement("span"); tag.className = "type-tag" + (s.type === "PRN" ? " prn" : ""); tag.textContent = s.type === "PRN" ? "PRN" : "Perm";
-      nm.appendChild(tag);
+      var typeSel = document.createElement("select"); typeSel.className = "type-select";
+      [["Permanent", "Permanent"], ["PRN", "PRN"]].forEach(function (o) {
+        var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1]; typeSel.appendChild(op);
+      });
+      typeSel.value = s.type === "PRN" ? "PRN" : "Permanent";
+      typeSel.addEventListener("change", function () {
+        var t = typeSel.value;
+        s.type = t;
+        if (t === "PRN") s.days = [];
+        renderStaffManageList(); render();
+        postAction("updateStaff", { id: s.id, fields: { type: t, days: t === "PRN" ? [] : normalizeDays(s.days) } });
+      });
+      nm.appendChild(typeSel);
       var chips;
       if (s.type === "PRN") {
         chips = document.createElement("span"); chips.className = "type-tag"; chips.style.color = "var(--muted)"; chips.textContent = "As needed";
@@ -635,6 +780,37 @@
       toggleBtn.addEventListener("click", function () { postAction("updateStaff", { id: s.id, fields: { active: !s.active } }); });
       row.appendChild(nm); row.appendChild(chips); row.appendChild(toggleBtn);
       wrap.appendChild(row);
+    });
+    renderTimeOffUI();
+  }
+
+  // ---------- time off ----------
+  function renderTimeOffUI() {
+    var sel = byId("toStaff");
+    var prev = sel.value;
+    sel.innerHTML = "";
+    state.staff.filter(function (s) { return s.active; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); })
+      .forEach(function (s) {
+        var op = document.createElement("option"); op.value = s.id; op.textContent = s.name; sel.appendChild(op);
+      });
+    if (prev) sel.value = prev;
+
+    var list = byId("toList"); list.innerHTML = "";
+    var rows = state.timeOff.filter(function (t) { return t.end >= todayISO; })
+      .sort(function (a, b) { return a.start < b.start ? -1 : (a.start > b.start ? 1 : 0); });
+    if (!rows.length) {
+      var p = document.createElement("p"); p.className = "empty-note"; p.style.padding = "8px 0"; p.textContent = "No upcoming time off."; list.appendChild(p); return;
+    }
+    rows.forEach(function (t) {
+      var row = document.createElement("div"); row.className = "staff-manage-row";
+      var info = document.createElement("span"); info.className = "nm"; info.style.flex = "1";
+      var range = fmtShort(fromISO(t.start)) + (t.end !== t.start ? " \u2013 " + fmtShort(fromISO(t.end)) : "");
+      info.textContent = t.staffName + " \u00b7 " + t.reason + " \u00b7 " + range;
+      var del = document.createElement("button"); del.className = "icon-btn danger"; del.textContent = "Remove";
+      del.addEventListener("click", function () { postAction("deleteTimeOff", { id: t.id }); });
+      row.appendChild(info); row.appendChild(del);
+      list.appendChild(row);
     });
   }
 
@@ -678,9 +854,43 @@
   }
 
   // ---------- wiring ----------
-  byId("prevWeek").addEventListener("click", function () { state.weekMonday = addDays(state.weekMonday, -7); render(); });
-  byId("nextWeek").addEventListener("click", function () { state.weekMonday = addDays(state.weekMonday, 7); render(); });
-  byId("todayBtn").addEventListener("click", function () { state.weekMonday = mondayOf(new Date()); render(); });
+  function shiftRange(dir) {
+    if (state.view === "month") state.monthStart = new Date(state.monthStart.getFullYear(), state.monthStart.getMonth() + dir, 1);
+    else state.weekMonday = addDays(state.weekMonday, 7 * dir);
+    render();
+  }
+  function setView(view) {
+    if (view === state.view) return;
+    if (view === "month") {
+      var mid = addDays(state.weekMonday, 2);
+      state.monthStart = new Date(mid.getFullYear(), mid.getMonth(), 1);
+    } else {
+      var now = new Date();
+      var sameMonth = now.getFullYear() === state.monthStart.getFullYear() && now.getMonth() === state.monthStart.getMonth();
+      state.weekMonday = mondayOf(sameMonth ? firstWeekday(now) : firstWeekday(state.monthStart));
+    }
+    state.view = view;
+    render();
+  }
+  byId("prevWeek").addEventListener("click", function () { shiftRange(-1); });
+  byId("nextWeek").addEventListener("click", function () { shiftRange(1); });
+  byId("todayBtn").addEventListener("click", function () {
+    var now = new Date();
+    if (state.view === "month") state.monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    else state.weekMonday = mondayOf(now);
+    render();
+  });
+  byId("viewWeekBtn").addEventListener("click", function () { setView("week"); });
+  byId("viewMonthBtn").addEventListener("click", function () { setView("month"); });
+  byId("toAddBtn").addEventListener("click", function () {
+    var staffId = byId("toStaff").value;
+    var start = byId("toStart").value;
+    var end = byId("toEnd").value || start;
+    if (!staffId || !start) { byId("toStart").focus(); return; }
+    if (end < start) { var tmp = start; start = end; end = tmp; }
+    postAction("addTimeOff", { staffId: staffId, staffName: staffName(staffId), start: start, end: end, reason: byId("toReason").value });
+    byId("toStart").value = ""; byId("toEnd").value = "";
+  });
   byId("manageBtn").addEventListener("click", function () { renderStaffManageList(); byId("modalBackdrop").hidden = false; });
   byId("closeModalBtn").addEventListener("click", function () { byId("modalBackdrop").hidden = true; });
   byId("modalBackdrop").addEventListener("click", function (e) { if (e.target === byId("modalBackdrop")) byId("modalBackdrop").hidden = true; });
